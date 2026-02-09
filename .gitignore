@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Dependencies
+
+# Build
+build/
+dist/
+
+# Coverage
+.htmlcov/
+.coverage
+
+# Tests
+.hypothesis/
+
+# Bookmarks
+*.plist
+
+# Output files
+*.json
+
+# Logs
+*.log
