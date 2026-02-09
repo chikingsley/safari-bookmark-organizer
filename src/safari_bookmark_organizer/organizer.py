@@ -214,6 +214,5 @@ if __name__ == "__main__":
     
     print("\n✅ Organization test completed successfully!")
     print("📁 Files created:")
-    print("  • sample_bookmarks.json (from test_parser.py)")
     print("  • test_organized.plist (organized version)")
     print("  • bookmarks_backup_before_organization.plist (backup)")

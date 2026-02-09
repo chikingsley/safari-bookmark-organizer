@@ -106,8 +106,6 @@ if __name__ == "__main__":
     
     print("\n🎉 Demo completed!")
     print("\n📁 Files created during demo:")
-    print("  • sample_bookmarks.json - Sample of your bookmark structure")
-    print("  • test_organized_output.plist - Example organized output")
     print("  • parsed_bookmarks.json - Full parsed bookmark data")
     
     print("\n💡 Next steps:")
