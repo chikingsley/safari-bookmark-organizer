@@ -13,6 +13,7 @@ from loguru import logger
 
 from .bookmark_parser import BookmarkParser
 from .organizer import BookmarkOrganizer
+from .preview import run_preview
 
 
 @click.group()
@@ -47,7 +48,7 @@ def parse(file_path, output):
 @click.argument('file_path', type=click.Path(), default="~/Library/Safari/Bookmarks.plist")
 @click.option('--apply', 'dry_run', flag_value=False, default=True, help='Apply changes to the bookmarks file')
 @click.option('--dry-run', 'dry_run', flag_value=True, help='Preview changes without applying (default)')
-@click.option('--opencode/--no-opencode', default=None, help='Enable OpenCode categorization if configured')
+@click.option('--opencode/--no-opencode', default=True, help='Enable OpenCode categorization')
 @click.option('--model', type=str, help='Override OpenCode model (OPENCODE_MODEL)')
 @click.option('--output', '-o', type=click.Path(), help='Output file for organized bookmarks')
 @click.option('--backup', '-b', is_flag=True, help='Create backup before organizing')
@@ -94,7 +95,7 @@ def organize(file_path, dry_run, opencode, model, output, backup):
 
 @main.command()
 @click.argument('file_path', type=click.Path(), default="~/Library/Safari/Bookmarks.plist")
-@click.option('--opencode/--no-opencode', default=None, help='Enable OpenCode categorization if configured')
+@click.option('--opencode/--no-opencode', default=True, help='Enable OpenCode categorization')
 @click.option('--model', type=str, help='Override OpenCode model (OPENCODE_MODEL)')
 def analyze(file_path, opencode, model):
     """Analyze bookmark structure and suggest organization."""
@@ -132,6 +133,21 @@ def backup(file_path, backup_path):
         save_path = backup_path or "bookmarks_backup.plist"
         click.echo(f"💾 Backup created at {save_path}")
         
+    except Exception as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        sys.exit(1)
+
+
+@main.command()
+@click.argument('file_path', type=click.Path(), default="~/Library/Safari/Bookmarks.plist")
+@click.option('--opencode/--no-opencode', default=True, help='Enable OpenCode categorization')
+@click.option('--model', type=str, help='Override OpenCode model (OPENCODE_MODEL)')
+@click.option('--port', type=int, default=8000, show_default=True, help='Preview server port')
+@click.option('--open/--no-open', "open_browser", default=True, help='Open browser automatically')
+def preview(file_path, opencode, model, port, open_browser):
+    """Launch a local preview UI for the proposed organization."""
+    try:
+        run_preview(file_path, use_opencode=opencode, model=model, port=port, open_browser=open_browser)
     except Exception as e:
         click.echo(f"❌ Error: {e}", err=True)
         sys.exit(1)

@@ -12,13 +12,13 @@ def test_cli_analyze_and_organize(tmp_path: Path):
         pytest.skip("bookmarks_backup.plist not present in repo")
 
     runner = CliRunner()
-    result = runner.invoke(main, ["analyze", str(backup)])
+    result = runner.invoke(main, ["analyze", str(backup), "--no-opencode"])
     assert result.exit_code == 0
 
     output_path = tmp_path / "organized.plist"
     result = runner.invoke(
         main,
-        ["organize", str(backup), "--dry-run", "--output", str(output_path)],
+        ["organize", str(backup), "--dry-run", "--output", str(output_path), "--no-opencode"],
     )
     assert result.exit_code == 0
     assert output_path.exists()

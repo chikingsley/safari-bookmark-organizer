@@ -20,8 +20,8 @@ A project to programmatically organize Safari bookmarks using AI categorization.
 
 ## AI Model
 
-OpenCode CLI integration is supported and disabled by default.
-Enable it by setting `OPENCODE_ENABLED=1` and optionally `OPENCODE_MODEL`.
+OpenCode CLI integration is supported and enabled by default in the CLI.
+Disable it with `--no-opencode` or set `OPENCODE_ENABLED=0`.
 
 ## Usage
 
@@ -38,8 +38,11 @@ uv run safari-organizer organize --dry-run
 # Apply organization
 uv run safari-organizer organize --apply
 
-# Enable OpenCode categorization
-OPENCODE_ENABLED=1 OPENCODE_MODEL=zai-coding-plan/glm-4.7-flash uv run safari-organizer organize --dry-run --opencode
+# Override OpenCode model (optional)
+OPENCODE_MODEL=zai-coding-plan/glm-4.7-flash uv run safari-organizer organize --dry-run --opencode
+
+# Launch preview UI
+uv run safari-organizer preview --port 8000
 
 # Run tests
 uv run pytest
