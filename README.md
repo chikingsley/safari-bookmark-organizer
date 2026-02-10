@@ -4,7 +4,6 @@ A project to programmatically organize Safari bookmarks using AI categorization.
 
 ## Project Structure
 
-- `bookmarks_backup.plist` - Backup of original Safari bookmarks
 - `src/safari_bookmark_organizer/organizer.py` - Main organization logic
 - `src/safari_bookmark_organizer/ai_categorizer.py` - Categorization logic (rule-based, OpenCode-ready)
 - `tests/` - Pytest discovery location (contains moved root test scripts)
@@ -49,4 +48,19 @@ uv run pytest
 
 # Run with linting
 uv run ruff check .
+```
+
+## Docker
+
+Build and run the preview UI:
+
+```bash
+docker compose up --build
+```
+
+Set your Cloudflare tunnel token in a local `.env` file:
+
+```bash
+CLOUDFLARE_TUNNEL_TOKEN=...
+BOOKMARKS_PATH=/Users/youruser/Library/Safari/Bookmarks.plist
 ```

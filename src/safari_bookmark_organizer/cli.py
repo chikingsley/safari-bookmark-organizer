@@ -142,12 +142,13 @@ def backup(file_path, backup_path):
 @click.argument('file_path', type=click.Path(), default="~/Library/Safari/Bookmarks.plist")
 @click.option('--opencode/--no-opencode', default=True, help='Enable OpenCode categorization')
 @click.option('--model', type=str, help='Override OpenCode model (OPENCODE_MODEL)')
+@click.option('--host', type=str, default="127.0.0.1", show_default=True, help='Preview server host')
 @click.option('--port', type=int, default=8000, show_default=True, help='Preview server port')
 @click.option('--open/--no-open', "open_browser", default=True, help='Open browser automatically')
-def preview(file_path, opencode, model, port, open_browser):
+def preview(file_path, opencode, model, host, port, open_browser):
     """Launch a local preview UI for the proposed organization."""
     try:
-        run_preview(file_path, use_opencode=opencode, model=model, port=port, open_browser=open_browser)
+        run_preview(file_path, use_opencode=opencode, model=model, host=host, port=port, open_browser=open_browser)
     except Exception as e:
         click.echo(f"❌ Error: {e}", err=True)
         sys.exit(1)

@@ -1,0 +1,20 @@
+version: "3.9"
+services:
+  app:
+    build: .
+    container_name: safari-bookmark-organizer
+    ports:
+      - "8000:8000"
+    environment:
+      OPENCODE_MODEL: "zai-coding-plan/glm-4.7-flash"
+      OPENCODE_ENABLED: "1"
+    volumes:
+      - "${BOOKMARKS_PATH:-./bookmarks_backup.plist}:/data/bookmarks.plist:ro"
+    command: ["uv", "run", "safari-organizer", "preview", "/data/bookmarks.plist", "--host", "0.0.0.0", "--port", "8000", "--no-open"]
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-tunnel
+    depends_on:
+      - app
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CLOUDFLARE_TUNNEL_TOKEN}"]

@@ -133,6 +133,7 @@ def run_preview(
     file_path: str,
     use_opencode: Optional[bool],
     model: Optional[str],
+    host: str = "127.0.0.1",
     port: int = 8000,
     open_browser: bool = True,
 ) -> None:
@@ -147,8 +148,8 @@ def run_preview(
 
     data = build_preview_data(str(path), use_opencode)
     handler = lambda *args, **kwargs: PreviewHandler(data, *args, **kwargs)
-    server = HTTPServer(("127.0.0.1", port), handler)
-    url = f"http://127.0.0.1:{port}"
+    server = HTTPServer((host, port), handler)
+    url = f"http://{host}:{port}"
     logger.info("Preview server running at {}", url)
 
     if open_browser:
