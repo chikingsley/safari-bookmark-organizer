@@ -3,7 +3,7 @@ name = "safari-bookmark-organizer"
 version = "0.1.0"
 description = "AI-powered Safari bookmark organizer using OpenCode CLI for smart categorization"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
     { name = "Chi Ejimofor", email = "chi@peacockery.studio" }
@@ -41,13 +41,11 @@ packages = ["src/safari_bookmark_organizer"]
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.408",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "ruff",
 ]
-
-[tool.ty.environment]
-python-version = "3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

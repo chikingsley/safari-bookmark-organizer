@@ -9,29 +9,34 @@ from __future__ import annotations
 import json
 import plistlib
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 
+from .utils import extract_domain
+
 if TYPE_CHECKING:
-    from typing import Dict, List, Optional
+    from .types import BookmarkItem, FolderItem
 
 
 class BookmarkParser:
     """Parse and extract data from Safari bookmarks.plist file."""
 
-    def __init__(self, file_path: Optional[str] = None):
+    def __init__(self, file_path: str | None = None):
         self.file_path = file_path or "~/Library/Safari/Bookmarks.plist"
-        self.data = None
-        self.bookmarks = []
-        self.folders = []
+        self.data: dict[str, Any] | None = None
+        self.bookmarks: list[BookmarkItem] = []
+        self.folders: list[FolderItem] = []
 
     def load(self) -> dict[str, Any]:
         """Load and parse the bookmarks.plist file."""
         try:
             expanded_path = Path(self.file_path).expanduser()
-            with open(expanded_path, 'rb') as f:
-                self.data = plistlib.load(f)
+            with expanded_path.open("rb") as f:
+                data = plistlib.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("Expected Safari bookmarks plist root to be a dict")
+            self.data = data
             logger.info(f"Loaded bookmarks from {expanded_path}")
             return self.data
         except Exception as e:
@@ -40,108 +45,86 @@ class BookmarkParser:
 
     def parse(self) -> None:
         """Parse the loaded bookmark data into structured format."""
-        if not self.data:
+        if self.data is None:
             self.load()
 
         # Extract bookmarks and folders
+        assert self.data is not None
         self._extract_items(self.data)
         logger.info(f"Found {len(self.bookmarks)} bookmarks and {len(self.folders)} folders")
 
-    def _extract_items(self, data: Dict[str, Any], parent: Optional[str] = None) -> None:
+    def _extract_items(self, data: Any, parent: str | None = None) -> None:
         """Recursively extract bookmarks and folders."""
         if not isinstance(data, dict):
             return
+        data = cast("dict[str, Any]", data)
 
         # Handle different bookmark types
-        if 'WebBookmarkType' in data:
-            bookmark_type = data['WebBookmarkType']
-            
-            if bookmark_type == 'WebBookmarkTypeLeaf':
-                # Individual bookmark
-                bookmark = {
-                    'title': data.get('URIDictionary', {}).get('title', 'Untitled'),
-                    'url': data.get('URLString', ''),
-                    'type': 'bookmark',
-                    'parent': parent,
-                    'uuid': data.get('WebBookmarkUUID')
-                }
-                self.bookmarks.append(bookmark)
-                
-            elif bookmark_type == 'WebBookmarkTypeList':
-                # Folder
-                folder = {
-                    'title': data.get('Title', 'Untitled Folder'),
-                    'type': 'folder',
-                    'parent': parent,
-                    'uuid': data.get('WebBookmarkUUID'),
-                    'children': []
-                }
-                self.folders.append(folder)
-                
-                # Recursively process children
-                if 'Children' in data:
-                    for child in data['Children']:
-                        self._extract_items(child, folder['title'])
+        bookmark_type = data.get("WebBookmarkType")
+        if not isinstance(bookmark_type, str):
+            return
+
+        if bookmark_type == "WebBookmarkTypeLeaf":
+            uri_dict = data.get("URIDictionary")
+            title = "Untitled"
+            if isinstance(uri_dict, dict):
+                title_value = cast("dict[str, Any]", uri_dict).get("title")
+                if isinstance(title_value, str):
+                    title = title_value
+            url_value = data.get("URLString")
+            url = url_value if isinstance(url_value, str) else ""
+            uuid_value = data.get("WebBookmarkUUID")
+            uuid = uuid_value if isinstance(uuid_value, str) else None
+            bookmark: BookmarkItem = {
+                "title": title,
+                "url": url,
+                "type": "bookmark",
+                "parent": parent,
+                "uuid": uuid,
+            }
+            self.bookmarks.append(bookmark)
+
+        elif bookmark_type == "WebBookmarkTypeList":
+            title_value = data.get("Title")
+            title = title_value if isinstance(title_value, str) else "Untitled Folder"
+            uuid_value = data.get("WebBookmarkUUID")
+            uuid = uuid_value if isinstance(uuid_value, str) else None
+            folder: FolderItem = {
+                "title": title,
+                "type": "folder",
+                "parent": parent,
+                "uuid": uuid,
+                "children": [],
+            }
+            self.folders.append(folder)
+
+            children = data.get("Children")
+            if isinstance(children, list):
+                for child in cast("list[Any]", children):
+                    self._extract_items(child, title)
 
     def to_json(self) -> str:
         """Convert parsed data to JSON format."""
-        return json.dumps({
-            'bookmarks': self.bookmarks,
-            'folders': self.folders
-        }, indent=2)
+        return json.dumps({"bookmarks": self.bookmarks, "folders": self.folders}, indent=2)
 
-    def get_bookmarks_by_category(self) -> Dict[str, List[Dict]]:
+    def get_bookmarks_by_category(self) -> dict[str, list[BookmarkItem]]:
         """Categorize bookmarks by domain/type."""
-        categories = {}
-        
+        categories: dict[str, list[BookmarkItem]] = {}
+
         for bookmark in self.bookmarks:
-            if not bookmark['url']:
+            if not bookmark["url"]:
                 continue
-                
+
             # Simple domain-based categorization
-            domain = self._extract_domain(bookmark['url'])
+            domain = extract_domain(bookmark["url"])
             if domain not in categories:
                 categories[domain] = []
             categories[domain].append(bookmark)
-        
-        return categories
 
-    def _extract_domain(self, url: str) -> str:
-        """Extract domain from URL."""
-        if not url:
-            return "unknown"
-        
-        # Remove protocol and path
-        domain = url.replace('https://', '').replace('http://', '').split('/')[0]
-        
-        # Handle common domains
-        if domain.startswith('www.'):
-            domain = domain[4:]
-            
-        return domain
+        return categories
 
     def save_to_file(self, output_path: str) -> None:
         """Save parsed data to JSON file."""
-        with open(output_path, 'w') as f:
-            f.write(self.to_json())
-        logger.info(f"Saved parsed bookmarks to {output_path}")
-
-
-if __name__ == "__main__":
-    # Test the parser
-    parser = BookmarkParser("bookmarks_backup.plist")
-    parser.load()
-    parser.parse()
-    
-    # Save to JSON for inspection
-    parser.save_to_file("parsed_bookmarks.json")
-    
-    # Print some stats
-    print(f"Total bookmarks: {len(parser.bookmarks)}")
-    print(f"Total folders: {len(parser.folders)}")
-    
-    # Show categories
-    categories = parser.get_bookmarks_by_category()
-    print(f"Categories found: {len(categories)}")
-    for category, bookmarks in list(categories.items())[:5]:
-        print(f"  {category}: {len(bookmarks)} bookmarks")
+        path = Path(output_path).expanduser()
+        path.write_text(self.to_json(), encoding="utf-8")
+        logger.info(f"Saved parsed bookmarks to {path}")
