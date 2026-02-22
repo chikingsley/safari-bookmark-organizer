@@ -1,141 +1,66 @@
 # Safari Bookmark Organizer - Project Status
 
-## ✅ Completed
+## Current State
 
-### Project Setup
-- [x] Created modern Python project structure with `pyproject.toml`
-- [x] Set up proper module structure in `src/` directory
-- [x] Created comprehensive `README.md` with usage instructions
-- [x] Installed required dependencies
+All core functionality complete. LLM integration via OpenAI-compatible APIs (OpenRouter, Ollama, vLLM). All linting, formatting, and type checking clean.
 
-### Core Functionality
-- [x] **Bookmark Parser** - Successfully parses Safari's binary PLIST format
-- [x] **AI Categorizer** - Intelligent categorization with pattern matching
-- [x] **Organizer** - Main organization logic with dry-run capability
-- [x] **CLI Interface** - Full command-line interface with multiple commands
+### Stack
 
-### Features Implemented
-- [x] Parse Safari bookmarks.plist files
-- [x] Extract bookmarks, folders, and metadata
-- [x] AI-powered categorization (rule-based with optional OpenCode CLI)
-- [x] Folder structure suggestions
-- [x] Dry-run mode for safe testing
-- [x] Backup functionality
-- [x] Organization preview
-- [x] JSON export for analysis
+- **Models**: Pydantic v2 with discriminated unions, `extra="allow"` for lossless plist round-trip
+- **LLM**: OpenAI SDK with structured output (`response_format` + Pydantic models)
+- **CLI**: Typer (parse, organize, analyze, backup, preview)
+- **Settings**: pydantic-settings with `LLM_*` env vars
+- **Linting**: ruff (extensive rule set)
+- **Type checking**: ty
+- **Testing**: pytest with real Safari plist fixtures
 
-### Testing & Demo
-- [x] Created comprehensive test script
-- [x] Built interactive demo script
-- [x] Successfully tested with real Safari bookmarks (152 bookmarks analyzed)
-- [x] Generated sample output files
+### Core Modules
 
-## 📊 Analysis Results
+- **models.py** — Pydantic models for Safari plist nodes (WebBookmarkTypeLeaf, WebBookmarkTypeList, WebBookmarkTypeProxy)
+- **safari_io.py** — `SafariBookmarkItem` tree wrapper + `SafariBookmarks` file I/O (open, save, load, dump, context manager)
+- **ai_categorizer.py** — LLM-powered bookmark categorization
+- **llm_client.py** — OpenAI SDK client with structured output for reliable categorization
+- **organizer.py** — Orchestrator: load plist, categorize bookmarks, build organized tree, save output
+- **types.py** — Pydantic BaseModel types for OrganizationPlan, BookmarkMove, FolderStructure
+- **preview.py** — Local HTTP server serving a single-page web UI for dry-run preview with search/filter
+- **cli.py** — Typer CLI with 5 commands
+- **settings.py** — LLM config via pydantic-settings (LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, etc.)
 
-From testing with your actual Safari bookmarks:
+### Test Coverage
 
-- **Total Bookmarks**: 152
-- **Categories Identified**: 6 (work, education, development, personal, tools, uncategorized)
-- **Folders to Create**: 6
-- **Bookmarks to Move**: 164
-- **Category Distribution**:
-  - uncategorized: 84 bookmarks (55%)
-  - development: 32 bookmarks (21%)
-  - work: 18 bookmarks (12%)
-  - education: 14 bookmarks (9%)
-  - tools: 13 bookmarks (8%)
-  - personal: 3 bookmarks (2%)
+- Real Safari plist fixtures (binary + XML) in `tests/support/fixtures/`
+- Tests cover: models, safari I/O, categorizer, organizer, CLI, settings, LLM client
 
-## 🚀 OpenCode Integration (Optional)
+## History
 
-The project includes a minimal OpenCode CLI wrapper. Enable via:
-`OPENCODE_ENABLED=1` and optionally `OPENCODE_MODEL=...`.
+### OpenCode → OpenRouter migration (completed)
 
-### Integration Points
+Replaced OpenCode CLI subprocess wrapper with direct LLM API calls:
 
-1. **Enhanced Categorization** (`ai_categorizer.py`):
-   - Replace rule-based categorization with OpenCode CLI analysis
-   - Add semantic understanding of bookmark content
-   - Implement context-aware categorization
+1. Deleted `opencode_client.py` (subprocess wrapper for `opencode run`)
+2. Created `llm_client.py` using `openai` SDK with `beta.chat.completions.parse()` for structured output
+3. Replaced `OpenCodeSettings` with `LLMSettings` (`LLM_*` env vars instead of `OPENCODE_*`)
+4. CLI flags: `--opencode/--no-opencode` → `--llm/--no-llm`
+5. Supports OpenRouter (default), Ollama, vLLM, or any OpenAI-compatible endpoint
 
-2. **Content Analysis**:
-   - Web page content fetching and analysis
-   - Topic modeling and keyword extraction
-   - Sentiment and purpose detection
+### Rule-based categorizer removal (completed)
 
-3. **Smart Organization**:
-   - Automatic folder naming based on content
-   - Hierarchical categorization
-   - Duplicate detection and merging
+Deleted hardcoded URL pattern/domain matching rules. Without LLM enabled, all bookmarks return "uncategorized". With LLM, the API handles categorization with grammar-constrained structured output.
 
-### Example Integration
+### Modernization (completed)
 
-Use the CLI with:
-`OPENCODE_ENABLED=1 OPENCODE_MODEL=zai-coding-plan/glm-4.7-flash uv run safari-organizer organize --dry-run --opencode`
+1. Pydantic Settings — `BaseSettings` with env var support
+2. Click to Typer — CLI migration
+3. Ruff rules — extensive lint rule set
+4. Test improvements — proper fixtures, parametrized tests
+5. ty type checker — added to CI checks
 
-## 📁 Project Structure
+### Pydantic Migration (completed)
 
-```
-safari-bookmark-organizer/
-├── pyproject.toml          # Modern Python project config
-├── README.md               # Documentation
-├── PROJECT_STATUS.md       # This file
-├── demo.py                 # Interactive demo
-├── tests/                  # Pytest tests
-├── src/
-│   └── safari_bookmark_organizer/
-│       ├── __init__.py     # Package init
-│       ├── bookmark_parser.py  # PLIST parsing
-│       ├── ai_categorizer.py   # Categorization logic
-│       ├── organizer.py        # Main organization
-│       └── cli.py              # Command-line interface
-```
+Ported Pydantic v2 models and real plist fixtures from `safari-bookmarks-cli`:
 
-## 🎯 Next Steps
-
-### Immediate
-1. **Review the preview output** - Use `uv run safari-organizer analyze`
-2. **Customize categories** - Edit `ai_categorizer.py` to match your preferred organization
-3. **Test with dry-run** - Run `uv run safari-organizer organize --dry-run`
-
-### OpenCode Integration
-1. **Model selection** - Pick a default model for your workflow
-2. **Enhance categorization** - Replace rule-based with OpenCode-driven analysis
-3. **Add content fetching** - Implement web page content analysis
-4. **Improve confidence scoring** - Use AI confidence metrics
-
-### Deployment
-1. **Background service** - Create a daemon that runs periodically
-2. **Change detection** - Watch for bookmark file changes
-3. **Automatic organization** - Apply rules when new bookmarks are added
-4. **Conflict resolution** - Handle duplicate bookmarks intelligently
-
-## 🔧 Usage Examples
-
-```bash
-# Analyze your bookmarks
-uv run demo.py
-
-# Preview organization (safe dry-run)
-uv run safari-organizer organize --dry-run
-
-# Apply organization (after review)
-uv run safari-organizer organize --apply
-```
-
-## ⚠️ Safety Notes
-
-1. **Always backup** - The system creates automatic backups, but manual backups are recommended
-2. **Dry-run first** - Always preview changes before applying
-3. **Review categories** - Customize the categorization rules to match your needs
-4. **Test incrementally** - Start with a subset of bookmarks if you have many
-
-## 🎉 Success Metrics
-
-The project successfully:
-- ✅ Parsed complex binary PLIST format
-- ✅ Extracted 152 bookmarks with full metadata
-- ✅ Categorized bookmarks into logical groups
-- ✅ Generated organization preview
-- ✅ Created backup and safety mechanisms
-- ✅ Built extensible architecture for OpenCode integration
+1. Added Pydantic models (`models.py`) and Safari I/O wrapper (`safari_io.py`)
+2. Converted TypedDict types to Pydantic BaseModel (`types.py`)
+3. Migrated `ai_categorizer.py` from dict access to `SafariBookmarkItem` attributes
+4. Migrated `organizer.py` from `BookmarkParser` to `SafariBookmarks` I/O
+5. Deleted deprecated `bookmark_parser.py`

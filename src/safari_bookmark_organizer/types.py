@@ -1,55 +1,46 @@
 from __future__ import annotations
 
-from typing import Any, Literal, NotRequired, Required, TypedDict
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, Field
 
 
-class BookmarkItem(TypedDict):
-    title: Required[str]
-    url: Required[str]
-    type: NotRequired[Literal["bookmark"]]
-    parent: NotRequired[str | None]
-    uuid: NotRequired[str | None]
-
-
-class FolderItem(TypedDict):
-    title: Required[str]
-    type: NotRequired[Literal["folder"]]
-    parent: NotRequired[str | None]
-    uuid: NotRequired[str | None]
-    children: NotRequired[list[Any]]
-
-
-class BookmarkNode(TypedDict):
+class BookmarkNode(BaseModel):
     name: str
     url: str
-    type: Literal["bookmark"]
+    type: Literal["bookmark"] = "bookmark"
 
 
-class FolderNode(TypedDict):
+class FolderNode(BaseModel):
     name: str
-    type: Literal["folder"]
-    children: list[TreeNode]
+    type: Literal["folder"] = "folder"
+    children: list[TreeNode] = []
 
 
-TreeNode = BookmarkNode | FolderNode
+TreeNode = Annotated[
+    BookmarkNode | FolderNode,
+    Field(discriminator="type"),
+]
+
+FolderNode.model_rebuild()
 
 
-class FolderStructure(TypedDict):
+class FolderStructure(BaseModel):
     name: str
-    children: list[TreeNode]
+    children: list[TreeNode] = []
 
 
-class BookmarkAnalysis(TypedDict):
-    keywords: list[str]
-    tags: list[str]
-    confidence: float
+FolderStructure.model_rebuild()
 
 
-BookmarkMove = TypedDict("BookmarkMove", {"title": str, "from": str, "to": str})
+class BookmarkMove(BaseModel):
+    title: str
+    from_folder: str
+    to_folder: str
 
 
-class OrganizationPlan(TypedDict):
-    total_bookmarks: int
-    categories: dict[str, int]
-    folders_to_create: list[str]
-    bookmarks_to_move: list[BookmarkMove]
+class OrganizationPlan(BaseModel):
+    total_bookmarks: int = 0
+    categories: dict[str, int] = {}
+    folders_to_create: list[str] = []
+    bookmarks_to_move: list[BookmarkMove] = []

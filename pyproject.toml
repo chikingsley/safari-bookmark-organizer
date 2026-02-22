@@ -1,7 +1,7 @@
 [project]
 name = "safari-bookmark-organizer"
 version = "0.1.0"
-description = "AI-powered Safari bookmark organizer using OpenCode CLI for smart categorization"
+description = "AI-powered Safari bookmark organizer using LLM APIs for smart categorization"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -19,9 +19,11 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "click>=8.0",
-    "python-dotenv>=1.0.0",
     "loguru>=0.7.0",
+    "openai>=1.50",
+    "pydantic>=2.1",
+    "pydantic-settings>=2.13.0",
+    "typer>=0.15",
 ]
 
 [project.urls]
@@ -41,10 +43,10 @@ packages = ["src/safari_bookmark_organizer"]
 
 [dependency-groups]
 dev = [
-    "pyright>=1.1.408",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "ruff",
+    "ty>=0.0.17",
 ]
 
 [tool.pytest.ini_options]
@@ -72,8 +74,34 @@ extend-select = [
     "TC",   # Enforce importing certain types in a TYPE_CHECKING block
     "PTH",  # Use pathlib instead of os.path
     "TD",   # Be diligent with TODO comments
+    "S",    # flake8-bandit security checks
+    "PERF", # Performance anti-patterns
+    "PL",   # Pylint rules
+    "RUF",  # Ruff-specific rules
+    "ERA",  # Detect commented-out code
+    "FBT",  # Boolean trap detection
 ]
 ignore = [
-    "E501",  # line too long (handled by formatter)
-    "B008",  # do not perform function calls in argument defaults
+    "E501",    # line too long (handled by formatter)
+    "B008",    # function calls in argument defaults (needed for typer.Option())
+    "PLR2004", # magic value comparisons
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S108", "FBT", "PLR0913", "PLC0415", "TC"]
+"src/**/cli.py" = ["FBT", "PLR0913"]
+"src/**/preview.py" = ["FBT001", "PLR0913"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ty.src]
+exclude = ["demo.py"]
+
+[tool.ty.rules]
+# Pydantic BaseSettings accepts _env_file at runtime via model_post_init,
+# but ty doesn't understand this generated __init__ parameter yet.
+unknown-argument = "ignore"
+
+[tool.ty.environment]
+python-version = "3.12"

@@ -17,8 +17,15 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.12-slim
 
+COPY --from=builder /bin/uv /bin/uv
+COPY --from=builder /bin/uvx /bin/uvx
+
 WORKDIR /app
 COPY --from=builder /app /app
+
+# Ensure OpenCode installer paths are discoverable.
+ENV PATH=/root/.opencode/bin:/root/.local/bin:$PATH \
+    UV_LINK_MODE=copy
 
 # Install OpenCode CLI in the image
 RUN apt-get update \
@@ -28,4 +35,4 @@ RUN apt-get update \
 
 EXPOSE 8000
 
-CMD ["uv", "run", "safari-organizer", "preview", "--host", "0.0.0.0", "--port", "8000", "--open"]
+CMD ["uv", "run", "safari-organizer", "preview", "/data/bookmarks.plist", "--host", "0.0.0.0", "--port", "8000", "--no-open"]

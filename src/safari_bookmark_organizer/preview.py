@@ -5,12 +5,14 @@ import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 
 from .organizer import BookmarkOrganizer
 
+if TYPE_CHECKING:
+    from .settings import LLMSettings
 
 HTML_TEMPLATE = """<!doctype html>
 <html lang="en">
@@ -100,57 +102,68 @@ HTML_TEMPLATE = """<!doctype html>
 """
 
 
-def build_preview_data(file_path: str, use_opencode: bool | None) -> Dict[str, Any]:
-    organizer = BookmarkOrganizer(file_path, use_opencode=use_opencode)
+def build_preview_data(
+    file_path: str,
+    *,
+    use_llm: bool | None = None,
+    taxonomy: str = "default",
+    settings: LLMSettings | None = None,
+) -> dict[str, Any]:
+    organizer = BookmarkOrganizer(
+        file_path, use_llm=use_llm, taxonomy=taxonomy, settings=settings
+    )
     organizer.load_and_parse()
-    categorized = organizer.categorizer.categorize_all(organizer.parser.bookmarks)
+    all_bookmarks = organizer._collect_bookmarks()
+    categorized = organizer.categorizer.categorize_all(all_bookmarks)
     tree = organizer.categorizer.suggest_folder_structure(categorized)
     plan = organizer.get_organization_plan()
-    return {"tree": tree, "plan": plan}
+    return {"tree": tree.model_dump(), "plan": plan.model_dump()}
 
 
 class PreviewHandler(BaseHTTPRequestHandler):
-    def __init__(self, data: Dict[str, Any], *args, **kwargs):
-        self._data = data
-        super().__init__(*args, **kwargs)
-
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path not in ("/", "/index.html"):
             self.send_response(404)
             self.end_headers()
             return
-        payload = HTML_TEMPLATE.replace("__DATA__", json.dumps(self._data))
+        server = cast("PreviewHTTPServer", self.server)
+        payload = HTML_TEMPLATE.replace("__DATA__", json.dumps(server.preview_data))
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
         self.wfile.write(payload.encode("utf-8"))
 
-    def log_message(self, format: str, *args) -> None:  # noqa: A003
+    def log_message(self, format: str, *args: object) -> None:
         return
+
+
+class PreviewHTTPServer(HTTPServer):
+    preview_data: dict[str, Any]
 
 
 def run_preview(
     file_path: str,
-    use_opencode: Optional[bool],
-    model: Optional[str],
+    *,
+    use_llm: bool | None = None,
+    taxonomy: str = "default",
     host: str = "127.0.0.1",
     port: int = 8000,
     open_browser: bool = True,
+    settings: LLMSettings | None = None,
 ) -> None:
-    if model:
-        import os
-
-        os.environ["OPENCODE_MODEL"] = model
-
     path = Path(file_path).expanduser()
     if not path.exists():
         raise FileNotFoundError(f"Bookmarks file not found: {path}")
 
-    data = build_preview_data(str(path), use_opencode)
-    handler = lambda *args, **kwargs: PreviewHandler(data, *args, **kwargs)
-    server = HTTPServer((host, port), handler)
-    url = f"http://{host}:{port}"
-    logger.info("Preview server running at {}", url)
+    data = build_preview_data(
+        str(path), use_llm=use_llm, taxonomy=taxonomy, settings=settings
+    )
+    server = PreviewHTTPServer((host, port), PreviewHandler)
+    server.preview_data = data
+
+    browser_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host  # noqa: S104
+    url = f"http://{browser_host}:{port}"
+    logger.info("Preview server running at http://{}:{}", host, port)
 
     if open_browser:
         threading.Timer(0.2, lambda: webbrowser.open(url)).start()

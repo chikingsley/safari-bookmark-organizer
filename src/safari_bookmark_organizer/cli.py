@@ -4,200 +4,235 @@ Command Line Interface
 CLI for the Safari Bookmark Organizer.
 """
 
-import os
+from __future__ import annotations
+
 import sys
+from enum import StrEnum
+from pathlib import Path
+from typing import Annotated
 
-import click
+import typer
 
-from .bookmark_parser import BookmarkParser
 from .organizer import BookmarkOrganizer
 from .preview import run_preview
+from .safari_io import SafariBookmarkItem, SafariBookmarks
+from .settings import LLMSettings
+
+app = typer.Typer(help="Safari Bookmark Organizer CLI.")
 
 
-@click.group()
-@click.version_option(version="0.1.0")
-def main() -> None:
+class Taxonomy(StrEnum):
+    default = "default"
+    existing = "existing"
+    opinionated = "opinionated"
+
+
+def _build_settings(*, llm: bool = False) -> LLMSettings:
+    """Build LLMSettings, optionally enabling LLM categorization."""
+    if llm:
+        return LLMSettings(enabled=True)
+    return LLMSettings()
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo("safari-bookmark-organizer 0.1.0")
+        raise typer.Exit()
+
+
+def _count_items(root: SafariBookmarkItem) -> tuple[int, int]:
+    """Count bookmarks and folders in the tree."""
+    num_bookmarks = 0
+    num_folders = 0
+    if root.is_bookmark:
+        num_bookmarks = 1
+    elif root.is_folder:
+        num_folders = 1
+    for child in root.children:
+        bm, fd = _count_items(child)
+        num_bookmarks += bm
+        num_folders += fd
+    return num_bookmarks, num_folders
+
+
+@app.callback()
+def _callback(
+    version: Annotated[
+        bool | None,
+        typer.Option("--version", callback=_version_callback, is_eager=True, help="Show version."),
+    ] = None,
+) -> None:
     """Safari Bookmark Organizer CLI."""
-    pass
 
 
-@main.command()
-@click.argument("file_path", type=click.Path(), default="~/Library/Safari/Bookmarks.plist")
-@click.option("--output", "-o", type=click.Path(), help="Output file path")
-def parse(file_path: str, output: str | None) -> None:
+@app.command()
+def parse(
+    file_path: Annotated[
+        str, typer.Argument(help="Path to Safari bookmarks plist")
+    ] = "~/Library/Safari/Bookmarks.plist",
+    output: Annotated[str | None, typer.Option("--output", "-o", help="Output file path")] = None,
+) -> None:
     """Parse Safari bookmarks file."""
     try:
-        parser = BookmarkParser(file_path)
-        parser.load()
-        parser.parse()
+        path = Path(file_path).expanduser()
+        bookmarks = SafariBookmarks.open(path)
+        num_bookmarks, num_folders = _count_items(bookmarks)
 
-        click.echo(f"✅ Parsed {len(parser.bookmarks)} bookmarks and {len(parser.folders)} folders")
+        typer.echo(f"Parsed {num_bookmarks} bookmarks and {num_folders} folders")
 
         if output:
-            parser.save_to_file(output)
-            click.echo(f"📁 Saved to {output}")
+            out_path = Path(output).expanduser()
+            out_path.write_text(bookmarks.json(), encoding="utf-8")
+            typer.echo(f"Saved to {output}")
 
     except Exception as e:
-        click.echo(f"❌ Error: {e}", err=True)
+        typer.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
 
-@main.command()
-@click.argument("file_path", type=click.Path(), default="~/Library/Safari/Bookmarks.plist")
-@click.option(
-    "--apply", "dry_run", flag_value=False, default=True, help="Apply changes to the bookmarks file"
-)
-@click.option(
-    "--dry-run", "dry_run", flag_value=True, help="Preview changes without applying (default)"
-)
-@click.option("--opencode/--no-opencode", default=False, help="Enable OpenCode categorization")
-@click.option("--model", type=str, help="Override OpenCode model (OPENCODE_MODEL)")
-@click.option(
-    "--taxonomy",
-    type=click.Choice(["default", "existing", "opinionated"], case_sensitive=False),
-    default="default",
-    show_default=True,
-    help="Category taxonomy for OpenCode",
-)
-@click.option("--output", "-o", type=click.Path(), help="Output file for organized bookmarks")
-@click.option("--backup", "-b", is_flag=True, help="Create backup before organizing")
+@app.command()
 def organize(
-    file_path: str,
-    dry_run: bool,
-    opencode: bool,
-    model: str | None,
-    taxonomy: str,
-    output: str | None,
-    backup: bool,
+    file_path: Annotated[
+        str, typer.Argument(help="Path to Safari bookmarks plist")
+    ] = "~/Library/Safari/Bookmarks.plist",
+    apply: Annotated[
+        bool, typer.Option("--apply", help="Apply changes to the bookmarks file")
+    ] = False,
+    llm: Annotated[
+        bool, typer.Option("--llm/--no-llm", help="Enable LLM categorization")
+    ] = False,
+    taxonomy: Annotated[
+        Taxonomy, typer.Option(help="Category taxonomy", case_sensitive=False)
+    ] = Taxonomy.default,
+    output: Annotated[
+        str | None, typer.Option("--output", "-o", help="Output file for organized bookmarks")
+    ] = None,
+    backup: Annotated[
+        bool, typer.Option("--backup", "-b", help="Create backup before organizing")
+    ] = False,
 ) -> None:
     """Organize Safari bookmarks using AI categorization."""
     try:
-        if model:
-            os.environ["OPENCODE_MODEL"] = model
-        organizer = BookmarkOrganizer(file_path, use_opencode=opencode, taxonomy=taxonomy)
+        settings = _build_settings(llm=llm)
+        organizer = BookmarkOrganizer(
+            file_path, use_llm=llm, taxonomy=taxonomy.value, settings=settings
+        )
 
-        # Create backup if requested
         if backup:
             organizer.backup_current()
-            click.echo("💾 Created backup of current bookmarks")
+            typer.echo("Created backup of current bookmarks")
 
-        # Load and parse
         organizer.load_and_parse()
-
-        # Preview changes
         organizer.preview_changes()
 
-        if not dry_run:
-            click.confirm("⚠️  Apply these changes?", abort=True)
-
-            # Organize
+        if apply:
+            typer.confirm("Apply these changes?", abort=True)
             organizer.organize(dry_run=False)
-
-            # Save
             save_path = output or file_path
             organizer.save_organized(save_path)
-
-            click.echo(f"✅ Organization completed and saved to {save_path}")
+            typer.echo(f"Organization completed and saved to {save_path}")
         else:
-            click.echo("📝 Dry run completed - no changes made")
-
+            typer.echo("Dry run completed - no changes made")
             if output:
                 organizer.save_organized(output)
-                click.echo(f"📁 Saved organized version to {output}")
+                typer.echo(f"Saved organized version to {output}")
 
     except Exception as e:
-        click.echo(f"❌ Error: {e}", err=True)
+        typer.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
 
-@main.command()
-@click.argument("file_path", type=click.Path(), default="~/Library/Safari/Bookmarks.plist")
-@click.option("--opencode/--no-opencode", default=False, help="Enable OpenCode categorization")
-@click.option("--model", type=str, help="Override OpenCode model (OPENCODE_MODEL)")
-@click.option(
-    "--taxonomy",
-    type=click.Choice(["default", "existing", "opinionated"], case_sensitive=False),
-    default="default",
-    show_default=True,
-    help="Category taxonomy for OpenCode",
-)
-def analyze(file_path: str, opencode: bool, model: str | None, taxonomy: str) -> None:
+@app.command()
+def analyze(
+    file_path: Annotated[
+        str, typer.Argument(help="Path to Safari bookmarks plist")
+    ] = "~/Library/Safari/Bookmarks.plist",
+    llm: Annotated[
+        bool, typer.Option("--llm/--no-llm", help="Enable LLM categorization")
+    ] = False,
+    taxonomy: Annotated[
+        Taxonomy, typer.Option(help="Category taxonomy", case_sensitive=False)
+    ] = Taxonomy.default,
+) -> None:
     """Analyze bookmark structure and suggest organization."""
     try:
-        if model:
-            os.environ["OPENCODE_MODEL"] = model
-        organizer = BookmarkOrganizer(file_path, use_opencode=opencode, taxonomy=taxonomy)
+        settings = _build_settings(llm=llm)
+        organizer = BookmarkOrganizer(
+            file_path, use_llm=llm, taxonomy=taxonomy.value, settings=settings
+        )
         organizer.load_and_parse()
 
         plan = organizer.get_organization_plan()
 
-        click.echo("📊 Bookmark Analysis:")
-        click.echo(f"Total bookmarks: {plan['total_bookmarks']}")
-        click.echo(f"Categories found: {len(plan['categories'])}")
-        click.echo(f"Suggested folders: {len(plan['folders_to_create'])}")
+        typer.echo("Bookmark Analysis:")
+        typer.echo(f"Total bookmarks: {plan.total_bookmarks}")
+        typer.echo(f"Categories found: {len(plan.categories)}")
+        typer.echo(f"Suggested folders: {len(plan.folders_to_create)}")
 
-        click.echo("\n📁 Category Distribution:")
-        for category, count in sorted(plan["categories"].items(), key=lambda x: x[1], reverse=True):
-            click.echo(f"  {category}: {count} bookmarks")
+        typer.echo("\nCategory Distribution:")
+        for category, count in sorted(plan.categories.items(), key=lambda x: x[1], reverse=True):
+            typer.echo(f"  {category}: {count} bookmarks")
 
     except Exception as e:
-        click.echo(f"❌ Error: {e}", err=True)
+        typer.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
 
-@main.command()
-@click.argument("file_path", type=click.Path(), default="~/Library/Safari/Bookmarks.plist")
-@click.option("--backup-path", "-b", type=click.Path(), help="Custom backup file path")
-def backup(file_path: str, backup_path: str | None) -> None:
+@app.command()
+def backup(
+    file_path: Annotated[
+        str, typer.Argument(help="Path to Safari bookmarks plist")
+    ] = "~/Library/Safari/Bookmarks.plist",
+    backup_path: Annotated[
+        str | None, typer.Option("--backup-path", "-b", help="Custom backup file path")
+    ] = None,
+) -> None:
     """Create a backup of Safari bookmarks."""
     try:
         organizer = BookmarkOrganizer(file_path)
         organizer.backup_current(backup_path)
-
         save_path = backup_path or "bookmarks_backup.plist"
-        click.echo(f"💾 Backup created at {save_path}")
+        typer.echo(f"Backup created at {save_path}")
 
     except Exception as e:
-        click.echo(f"❌ Error: {e}", err=True)
+        typer.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
 
-@main.command()
-@click.argument("file_path", type=click.Path(), default="~/Library/Safari/Bookmarks.plist")
-@click.option("--opencode/--no-opencode", default=False, help="Enable OpenCode categorization")
-@click.option("--model", type=str, help="Override OpenCode model (OPENCODE_MODEL)")
-@click.option(
-    "--taxonomy",
-    type=click.Choice(["default", "existing", "opinionated"], case_sensitive=False),
-    default="default",
-    show_default=True,
-    help="Category taxonomy for OpenCode",
-)
-@click.option(
-    "--host", type=str, default="127.0.0.1", show_default=True, help="Preview server host"
-)
-@click.option("--port", type=int, default=8000, show_default=True, help="Preview server port")
-@click.option("--open/--no-open", "open_browser", default=True, help="Open browser automatically")
+@app.command()
 def preview(
-    file_path: str,
-    opencode: bool,
-    model: str | None,
-    taxonomy: str,
-    host: str,
-    port: int,
-    open_browser: bool,
+    file_path: Annotated[
+        str, typer.Argument(help="Path to Safari bookmarks plist")
+    ] = "~/Library/Safari/Bookmarks.plist",
+    llm: Annotated[
+        bool, typer.Option("--llm/--no-llm", help="Enable LLM categorization")
+    ] = False,
+    taxonomy: Annotated[
+        Taxonomy, typer.Option(help="Category taxonomy", case_sensitive=False)
+    ] = Taxonomy.default,
+    host: Annotated[str, typer.Option(help="Preview server host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Preview server port")] = 8000,
+    open_browser: Annotated[
+        bool, typer.Option("--open/--no-open", help="Open browser automatically")
+    ] = True,
 ) -> None:
     """Launch a local preview UI for the proposed organization."""
     try:
+        settings = _build_settings(llm=llm)
         run_preview(
             file_path,
-            use_opencode=opencode,
-            model=model,
-            taxonomy=taxonomy,
+            use_llm=llm,
+            taxonomy=taxonomy.value,
             host=host,
             port=port,
             open_browser=open_browser,
+            settings=settings,
         )
     except Exception as e:
-        click.echo(f"❌ Error: {e}", err=True)
+        typer.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
+
+def main() -> None:
+    """Entry point for the CLI."""
+    app()

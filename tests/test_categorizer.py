@@ -1,102 +1,68 @@
-from safari_bookmark_organizer.ai_categorizer import AICategorizer
-from safari_bookmark_organizer.types import BookmarkItem
+from __future__ import annotations
+
+from conftest import make_bookmark
+
+from safari_bookmark_organizer.ai_categorizer import (
+    DEFAULT_CATEGORIES,
+    OPINIONATED_CATEGORIES,
+    AICategorizer,
+)
+from safari_bookmark_organizer.types import FolderNode
 
 
-def _bookmark(title: str, url: str) -> BookmarkItem:
-    return {"title": title, "url": url}
+class TestCategorizeWithoutLLM:
+    """Without LLM, everything goes to uncategorized."""
 
+    def test_single_bookmark(self) -> None:
+        categorizer = AICategorizer(use_llm=False)
+        result = categorizer.categorize_bookmark(make_bookmark("GitHub Home", "https://github.com"))
+        assert result == "uncategorized"
 
-class TestRuleBasedCategorization:
-    """Test the rule-based fallback (no OpenCode)."""
-
-    def setup_method(self) -> None:
-        self.categorizer = AICategorizer(use_opencode=False)
-
-    def test_work_pattern(self) -> None:
-        result = self.categorizer.categorize_bookmark(
-            _bookmark("Company Portal", "https://company.com/work")
-        )
-        assert result == ["work"]
-
-    def test_education_domain(self) -> None:
-        result = self.categorizer.categorize_bookmark(
-            _bookmark("n8n Course", "https://docs.n8n.io/courses/beginner")
-        )
-        assert result == ["education"]
-
-    def test_development_domain(self) -> None:
-        result = self.categorizer.categorize_bookmark(
-            _bookmark("My Repo", "https://github.com/user/repo")
-        )
-        assert result == ["development"]
-
-    def test_personal_pattern(self) -> None:
-        result = self.categorizer.categorize_bookmark(
-            _bookmark("Guitar Lessons", "https://sixstringfingerpicking.com")
-        )
-        assert result == ["personal"]
-
-    def test_uncategorized_fallback(self) -> None:
-        result = self.categorizer.categorize_bookmark(
-            _bookmark("Random Page", "https://randomxyz123.com/page")
-        )
-        assert result == ["uncategorized"]
-
-
-class TestCategorizeAll:
-    def test_groups_bookmarks(self) -> None:
-        categorizer = AICategorizer(use_opencode=False)
+    def test_all_bookmarks(self) -> None:
+        categorizer = AICategorizer(use_llm=False)
         bookmarks = [
-            _bookmark("GitHub Home", "https://github.com"),
-            _bookmark("Stack Overflow", "https://stackoverflow.com/questions"),
-            _bookmark("Guitar Tab", "https://sixstringfingerpicking.com/tab"),
+            make_bookmark("GitHub", "https://github.com"),
+            make_bookmark("Stack Overflow", "https://stackoverflow.com"),
+            make_bookmark("Guitar Tab", "https://sixstringfingerpicking.com/tab"),
         ]
         result = categorizer.categorize_all(bookmarks)
-        assert "development" in result
-        assert len(result["development"]) == 2
-        assert "personal" in result
+        assert list(result.keys()) == ["uncategorized"]
+        assert len(result["uncategorized"]) == 3
+
+
+class TestCategories:
+    def test_default_categories(self) -> None:
+        categorizer = AICategorizer(use_llm=False)
+        assert categorizer.opencode_categories == DEFAULT_CATEGORIES
+        assert "uncategorized" in categorizer.opencode_categories
+
+    def test_opinionated_categories(self) -> None:
+        categorizer = AICategorizer(use_llm=False, taxonomy="opinionated")
+        assert categorizer.opencode_categories == OPINIONATED_CATEGORIES
+
+    def test_set_custom_categories(self) -> None:
+        categorizer = AICategorizer(use_llm=False)
+        custom = ["a", "b", "uncategorized"]
+        categorizer.set_opencode_categories(custom)
+        assert categorizer.opencode_categories == custom
 
 
 class TestFolderStructure:
     def test_suggest_folder_structure(self) -> None:
-        categorizer = AICategorizer(use_opencode=False)
+        categorizer = AICategorizer(use_llm=False)
         categories = {
             "development": [
-                _bookmark("GitHub", "https://github.com"),
-                _bookmark("SO", "https://stackoverflow.com"),
+                make_bookmark("GitHub", "https://github.com"),
+                make_bookmark("SO", "https://stackoverflow.com"),
             ],
-            "solo": [_bookmark("One", "https://one.com")],
+            "solo": [make_bookmark("One", "https://one.com")],
         }
         structure = categorizer.suggest_folder_structure(categories)
-        assert structure["name"] == "Bookmarks"
-        # Only "development" should become a folder (solo has <2 items)
-        children = structure["children"]
+        assert structure.name == "Bookmarks"
+        children = structure.children
         assert len(children) == 1
-        assert children[0]["name"] == "Development"
-        assert len(children[0]["children"]) == 2
-
-
-class TestOpinionatedTaxonomy:
-    def test_opinionated_categories(self) -> None:
-        categorizer = AICategorizer(use_opencode=False, taxonomy="opinionated")
-        expected = ["work", "build", "learn", "tools", "reference", "personal", "uncategorized"]
-        assert categorizer.opencode_categories == expected
-
-
-class TestAnalyzeBookmark:
-    def test_keyword_extraction(self) -> None:
-        categorizer = AICategorizer(use_opencode=False)
-        result = categorizer.analyze_bookmark_content(
-            _bookmark("API Documentation Tutorial", "https://docs.example.com/api")
-        )
-        assert "api" in result["keywords"]
-        assert "documentation" in result["keywords"]
-        assert "tutorial" in result["keywords"]
-        assert result["confidence"] > 0
-
-    def test_tags_include_domain(self) -> None:
-        categorizer = AICategorizer(use_opencode=False)
-        result = categorizer.analyze_bookmark_content(
-            _bookmark("Page", "https://example.com/page")
-        )
-        assert "example.com" in result["tags"]
+        child = children[0]
+        assert child.name == "Development"
+        assert child.type == "folder"
+        assert isinstance(child, FolderNode)
+        assert len(child.children) == 2
