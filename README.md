@@ -4,11 +4,11 @@ AI-powered Safari bookmark organization using LLM APIs (OpenRouter, Ollama, vLLM
 
 ## What It Does
 
-1. **Reads** Safari's `~/Library/Safari/Bookmarks.plist` (binary or XML)
-2. **Categorizes** bookmarks using LLM APIs with structured output
-3. **Proposes** an organized folder structure with a dry-run preview
-4. **Writes** the reorganized bookmarks to a new plist file
-5. **Preview UI** — local web server to browse the proposed structure with search/filter
+1. Reads Safari's `~/Library/Safari/Bookmarks.plist` (binary or XML)
+2. Categorizes bookmarks using LLM APIs with structured output
+3. Proposes an organized folder structure with a dry-run preview
+4. Writes the reorganized bookmarks to a new plist file
+5. Preview UI — local web server to browse the proposed structure with search/filter
 
 ## Setup
 
